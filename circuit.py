@@ -1,8 +1,10 @@
 import numpy as np
 import math
 import cmath
-import qutip
+from fractions import gcd
 import random
+import time
+import matplotlib.pyplot as plt
 np.set_printoptions(linewidth = 300)
 
 def ReadInput(fileName):
@@ -116,6 +118,14 @@ def cnot(totalWires, controller, target):
     
     return kron_list(arrlist)
 
+'''
+def pauli_x():
+    return np.array([[1,0],[0,-1]]) 
+
+def pauli_y():
+
+def pauli_z():
+'''
 def kron_list(arrlist):
     outarr = arrlist[0]
     for i in range(1, len(arrlist)):
@@ -180,18 +190,53 @@ def build_random(filename, length, numWires):
 	with open(filename, 'w') as f:
 		f.write(description)
         print description
+
+def classical_shors(n):
+    a = random.randint(0, int(math.sqrt(n)))
+    #print(x)
+    r = 0
+    retval = (-1, -1)
+    if gcd(a, n) != 1: # we found a nontrivial factor
+        retval = (gcd(a, n), n/gcd(a , n))
+    else: #need to complete rest of shor's
+        r = 1
+        while (a**r)%n != 1:
+            r += 1
+        if r%2 == 1: #if r is odd try again
+            retval =  classical_shors(n)
+        else: 
+            first = gcd(a**(r/2) - 1, n)
+            second = gcd(a**(r/2) + 1, n)
+            if(first == 1 or second == 1):
+                retval =  classical_shors(n)
+            else:
+                retval = (first, second)
+    return retval
+
+
+def time_function(myfnc, param = None):
+    start = time.time()
+    myfnc(param)
+    end = time.time()
+    return end-start
+
+
+def plot_runtime(myfnc, domain):
+    times = []
+    for i in domain:
+        print(time_function(myfnc, i))
+        times.append(time_function(myfnc, i))
+    plt.plot(domain, times)
+    plt.show()
+
+
+    
+print(classical_shors(71**2))
+plot_runtime(classical_shors, range(5, 70))
 #print(ReadInput('circuit/ex1'))   
 #print(hadamard(3,0))
 #print(np.identity(8).dot(hadamard(3, 1)))
 
-def graph(vec):
-    b = qutip.Bloch()
-    up = qutip.basis(2,0)
-    down = qutip.basis(2,1)
-    b.add_states(vec[0]*up + vec[1]*down)
-    b.show()
-
-graph(myOneWireState)
 
 #build_random("circuit/random", 4, 3)
 #print(process_circuit('circuit/random'))
