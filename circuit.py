@@ -126,6 +126,21 @@ def pauli_y():
 
 def pauli_z():
 '''
+
+def swapNN(wire1, wire2, totalWires):
+    tokron = []
+    identityMtx = np.identity(2)
+    neighborswap = np.array([[1, 0, 0, 0],[0, 0, 1, 0],[0, 1, 0, 0],[0, 0, 0, 1]])
+    for i in range(wire1):
+        tokron.append(identityMtx)
+    tokron.append(neighborswap)
+    for i in range(wire2, totalWires - wire2+1):
+        tokron.append(identityMtx)
+    retgate = kron_list(tokron)
+    print len(retgate)
+    print(retgate)
+    
+    
 def kron_list(arrlist):
     outarr = arrlist[0]
     for i in range(1, len(arrlist)):
@@ -191,48 +206,143 @@ def build_random(filename, length, numWires):
 		f.write(description)
         print description
 
-def classical_shors(n):
-    a = random.randint(0, int(math.sqrt(n)))
+def classical_shors(n, failures):
+    a = random.randint(1, int(math.sqrt(n)))
     #print(x)
     r = 0
     retval = (-1, -1)
     if gcd(a, n) != 1: # we found a nontrivial factor
-        retval = (gcd(a, n), n/gcd(a , n))
+        #print("successful guess: a is " + str(a) + " and the gcd of a and n is " + str(gcd(a,n)))
+        retval = [(gcd(a, n), n/gcd(a , n)), 0, failures]
     else: #need to complete rest of shor's
         r = 1
-        while (a**r)%n != 1:
+        while mod_mult(a,r,n) != 1:
             r += 1
         if r%2 == 1: #if r is odd try again
-            retval =  classical_shors(n)
+            #print("failed due to odd exponent")
+            retval =  classical_shors(n, failures + 1)
+            
         else: 
-            first = gcd(a**(r/2) - 1, n)
-            second = gcd(a**(r/2) + 1, n)
+            prod = mod_mult(a, (r/2), n)
+            first = gcd(prod - 1, n)
+            second = gcd(prod + 1, n)
+            #print("got into the prod block")
             if(first == 1 or second == 1):
-                retval =  classical_shors(n)
+                #print("failed due to trivial factor")
+                retval =  classical_shors(n, failures + 1)
+                
             else:
-                retval = (first, second)
+                retval = [(first, second), r, failures]
+                #print("total failures: " + str(failures))
+                
+    #print("factored " + str(n) + " into " + str(retval))
     return retval
 
 
-def time_function(myfnc, param = None):
-    start = time.time()
-    myfnc(param)
-    end = time.time()
-    return end-start
+def mod_mult(base, exp, modulo):
+    prod = 1
+    for i in range(exp):
+        prod = (prod * base)%modulo
+    return prod
 
+def time_function(myfnc, iterations,  param = None):
+    timespent = 0
+    for i in range(iterations):
+        start = time.time()
+        myfnc(param)
+        end = time.time()
+        timespent += end-start
+    return float(timespent)/iterations
 
-def plot_runtime(myfnc, domain):
-    times = []
-    for i in domain:
-        print(time_function(myfnc, i))
-        times.append(time_function(myfnc, i))
-    plt.plot(domain, times)
+def is_exponent(n):
+    ret = False
+    for k in range(2, int(math.ceil(np.log(n)/np.log(2) + 1))):
+        #print(k)
+        if abs(round(n**(1.0/k)) - n**(1.0/k)) < 1*10**(-10):
+            ret = True
+            #print("one factor of the number " + str(n) + " is " + round(n**(1.0/k)))
+
+    return ret
+        
+def plot_shors_guesses(domain, trialsperint, iterations):
+    guesses = []
+    for k in domain:
+        total = 0
+        for j in range(trialsperint):
+            randomnumber = random.randint(2**k, 2**(k+1) - 1)
+            #print("trying with number " + str(randomnumber))
+            while(randomnumber%2 == 0 or is_prime(randomnumber) or is_exponent(randomnumber)):
+                randomnumber = random.randint(2**k, 2**(k+1) - 1)
+            print("testing with random number " + str(randomnumber))
+            #print(time_function(myfnc, i))
+            for it in range(iterations):
+                ret = classical_shors(randomnumber)
+                total += ret[1]
+                print("factored " + str(randomnumber) + " into " + str(ret))
+        guesses.append(float(total)/iterations/trialsperint)
+    
+    plt.plot(domain, guesses, 'ro')
     plt.show()
 
-
+def plot_shors_failures(domain, trialsperint, iterations):
+    numbers = []
+    failures = []
+    for k in domain:
+        for j in range(trialsperint):
+            total = 0
+            randomnumber = random.randint(2**k, 2**(k+1) - 1)
+            #print("trying with number " + str(randomnumber))
+            while(randomnumber%2 == 0 or is_prime(randomnumber) or is_exponent(randomnumber)):
+                randomnumber = random.randint(2**k, 2**(k+1) - 1)
+            print("testing with random number " + str(randomnumber))
+            #print(time_function(myfnc, i))
+            for it in range(iterations):
+                ret = classical_shors(randomnumber, 0)
+                total += ret[2]
+                print("factored " + str(randomnumber) + " into " + str(ret))
+                failures.append(float(total)/iterations)
+                numbers.append(randomnumber)
     
-print(classical_shors(71**2))
-plot_runtime(classical_shors, range(5, 70))
+    plt.plot(numbers, failures, 'ro')
+    plt.show()
+
+def is_prime(n):
+    isprime = True
+    for i in range(2,int(math.sqrt(n))+1):
+        if n%i == 0:
+            isprime = False
+
+    return isprime
+
+def gen_primes(numPrimes):
+    primelist = []
+    counter = 0
+    n = 2
+    while(counter < numPrimes):
+        if is_prime(n):
+            primelist.append(n)
+            counter+=1
+        n += 1
+    return primelist
+
+def gen_product_primes(numPrimes):
+    primeproductlist = []    
+    primelist = gen_primes(numPrimes)
+    for i in range(len(primelist)):
+        for j in range(i, len(primelist)):
+            primeproductlist.append(primelist[i]*primelist[j])
+    primeproductlist.sort()
+    return primeproductlist
+
+#swapNN(1, 2, 3)
+
+#print(gen_product_primes(30))
+#print(classical_shors(71*53*11, 0))
+#print(mod_mult(71, 10, 15))
+plot_shors_failures(range(3,14), 100, 5)
+#plot_shors_guesses(range(3, 14), 100, 5)
+#print(is_prime(6))
+#print(is_prime(71))
 #print(ReadInput('circuit/ex1'))   
 #print(hadamard(3,0))
 #print(np.identity(8).dot(hadamard(3, 1)))
