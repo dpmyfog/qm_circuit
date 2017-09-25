@@ -131,15 +131,28 @@ def swapNN(wire1, wire2, totalWires):
     tokron = []
     identityMtx = np.identity(2)
     neighborswap = np.array([[1, 0, 0, 0],[0, 0, 1, 0],[0, 1, 0, 0],[0, 0, 0, 1]])
-    for i in range(wire1):
+    for i in range(0,wire1):
         tokron.append(identityMtx)
     tokron.append(neighborswap)
-    for i in range(wire2, totalWires - wire2+1):
+    for i in range(wire2, totalWires - wire2):
         tokron.append(identityMtx)
+    tokron.reverse()
     retgate = kron_list(tokron)
-    print len(retgate)
-    print(retgate)
-    
+    return retgate
+
+def rangedSwap(wire1, wire2, totalWires):
+    retgate = np.identity(2**totalWires)
+    for i in range(0, wire2-wire1):
+        print("retgate is currently: " + str(len(retgate)) + "x" + str(len(retgate[0])))
+        
+        nnswapgate = swapNN(wire1+i, wire1+i+1, totalWires)
+        print("nnswap is currently: " + str(len(nnswapgate)) + "x" + str(len(nnswapgate[0])))
+        retgate = np.dot(retgate, nnswapgate)
+        #print(len(retgate[0]))
+    for i in np.arange(wire2-1, wire1-1, -1):
+        print(len(swapNN(i-1, i, totalWires)))
+        retgate = np.dot(retgate, swapNN(i-1, i, totalWires))
+        
     
 def kron_list(arrlist):
     outarr = arrlist[0]
@@ -151,9 +164,10 @@ def process_circuit(filename):
     myInput = ReadInput(filename)
     totalWires = myInput[0]
     numGates = len(myInput[1])
-    print(numGates)
+    #print(numGates)
     size = 2**totalWires
     gatesMatrix = np.identity(size)
+    willMeasure = False
     for i in xrange(numGates-1, -1, -1): #process gates in reverse order
         if myInput[1][i][0] == 'H':
             #print(totalWires)
@@ -162,13 +176,37 @@ def process_circuit(filename):
             gatesMatrix = gatesMatrix.dot(hadamard(int(totalWires), int(myInput[1][i][1])))
         elif myInput[1][i][0] == 'CNOT':
             gatesMatrix = gatesMatrix.dot(cnot(int(totalWires), int(myInput[1][i][1]), int(myInput[1][i][2])))
+        
         elif myInput[1][i][0] == 'P':
-            print('read phase')
+            #print('read phase')
             gatesMatrix = gatesMatrix.dot(phase(int(totalWires), int(myInput[1][i][1]), float(myInput[1][i][2])))     
+        
         elif myInput[1][i][0] == 'Measure':
-            print('measure')
+            
+            willMeasure= True
+    if willMeasure:
+        inputstate = np.array([[1.0],[0],[0],[0],[0],[0],[0],[0]])
+        print("Measured the state corresponding to the decimal number: " + str(measure(inputstate, gatesMatrix)))
     return gatesMatrix
-       
+
+def measure(input, gatesMatrix): #given some input state and unitary matrix representing the circuit, this function 
+    output =  np.dot(gatesMatrix, input)
+    coefflist = []
+    currSum = 0
+    for i in range(len(output)):
+        currSum += round(100000*(np.abs(output[i][0]))**2)/1000 #fix some floating point stuff, mostly trailing 9s
+        coefflist.append(currSum)
+    #roll a random float between 0 (inc) and 100 (exc) and return the first index s.t. coeff(index) > randomfloat
+    randfloat = np.random.uniform(0, 100)
+    idx = 0
+    while randfloat > coefflist[idx]:
+        idx+=1
+    print coefflist
+    return idx
+    
+    
+    
+
 def build_random(filename, length, numWires):
 	#first create random circuit as a string, each element terminated with newline
 	#can do phase, hadamard, nearest-neighbor CNOT
@@ -286,6 +324,7 @@ def plot_shors_guesses(domain, trialsperint, iterations):
 
 def plot_shors_failures(domain, trialsperint, iterations):
     numbers = []
+    times = []
     failures = []
     for k in domain:
         for j in range(trialsperint):
@@ -297,13 +336,18 @@ def plot_shors_failures(domain, trialsperint, iterations):
             print("testing with random number " + str(randomnumber))
             #print(time_function(myfnc, i))
             for it in range(iterations):
+                start = time.time()
                 ret = classical_shors(randomnumber, 0)
+                end = time.time()
                 total += ret[2]
                 print("factored " + str(randomnumber) + " into " + str(ret))
                 failures.append(float(total)/iterations)
                 numbers.append(randomnumber)
+                times.append(end-start)
     
     plt.plot(numbers, failures, 'ro')
+    plt.figure()
+    plt.plot(numbers, times, 'bo')
     plt.show()
 
 def is_prime(n):
@@ -334,13 +378,21 @@ def gen_product_primes(numPrimes):
     primeproductlist.sort()
     return primeproductlist
 
-#swapNN(1, 2, 3)
+##NEAREST NEIGHBOR SWAP
+#print(swapNN(1,2,3))
+#print(rangedSwap(0, 2, 3))
 
 #print(gen_product_primes(30))
 #print(classical_shors(71*53*11, 0))
 #print(mod_mult(71, 10, 15))
-plot_shors_failures(range(3,14), 100, 5)
+
+##PLOTTING SHORS FAILURES vs log(n) (AND TIME COMPLEXITY)
+#plot_shors_failures(range(3,14), 100, 5)
+
+##PLOT OF GUESSES REQUIRED (r) VS log(n)
 #plot_shors_guesses(range(3, 14), 100, 5)
+
+
 #print(is_prime(6))
 #print(is_prime(71))
 #print(ReadInput('circuit/ex1'))   
@@ -349,4 +401,19 @@ plot_shors_failures(range(3,14), 100, 5)
 
 
 #build_random("circuit/random", 4, 3)
-#print(process_circuit('circuit/random'))
+
+
+##PROCESS EX1 WITH MEASURE
+process_circuit('circuit/ex1')
+
+
+##HISTOGRAMMING MEASUREMENT OF AN OUTPUT STATE GIVEN SOME INPUT STATE
+'''
+inputState = np.array([[1.0],[0],[0],[0],[0],[0],[0],[0]])
+mydict = {}
+for i in range(len(inputState)):
+    mydict[i] = 0
+for i in range(1000):
+    mydict[measure(inputState, process_circuit('circuit/ex1'))] += 1
+print mydict
+'''
