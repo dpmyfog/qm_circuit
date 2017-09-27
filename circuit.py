@@ -6,7 +6,7 @@ import random
 import time
 import matplotlib.pyplot as plt
 np.set_printoptions(linewidth = 300)
-
+np.set_printoptions(threshold = np.nan)
 def ReadInput(fileName):
     myInput_lines=open(fileName).readlines()
     myInput=[]
@@ -91,6 +91,7 @@ def phase(totalWires, targetWire, phase):
     #print(arrlist)
     return kron_list(arrlist)
 
+
 def hadamard(totalWires, targetWire):
     sq  = 1/math.sqrt(2)
     hadamardArray = np.array([[sq, sq],[sq, -1*sq]])
@@ -134,26 +135,51 @@ def swapNN(wire1, wire2, totalWires):
     for i in range(0,wire1):
         tokron.append(identityMtx)
     tokron.append(neighborswap)
-    for i in range(wire2, totalWires - wire2):
+    for i in range(wire2+1, totalWires):
         tokron.append(identityMtx)
     tokron.reverse()
     retgate = kron_list(tokron)
     return retgate
 
+
 def rangedSwap(wire1, wire2, totalWires):
-    retgate = np.identity(2**totalWires)
+    list_to_swap = []
     for i in range(0, wire2-wire1):
-        print("retgate is currently: " + str(len(retgate)) + "x" + str(len(retgate[0])))
+        list_to_swap.append((wire1+i, wire1+i+1))
         
-        nnswapgate = swapNN(wire1+i, wire1+i+1, totalWires)
-        print("nnswap is currently: " + str(len(nnswapgate)) + "x" + str(len(nnswapgate[0])))
-        retgate = np.dot(retgate, nnswapgate)
-        #print(len(retgate[0]))
-    for i in np.arange(wire2-1, wire1-1, -1):
-        print(len(swapNN(i-1, i, totalWires)))
-        retgate = np.dot(retgate, swapNN(i-1, i, totalWires))
+    for i in range(1, wire2 - wire1):
+        list_to_swap.append((wire2 - i - 1 ,wire2-i))
+    return doSwap(list_to_swap, totalWires)
+
+def doSwap(swaplist, totalWires):
+    print(swaplist)
+    identityMtx = np.identity(2**totalWires)
+    retMtx = identityMtx
+    for i in range(len(swaplist)):
+        wire1 = swaplist[i][0]
+        wire2 = swaplist[i][1]
+        retMtx = np.dot(swapNN(wire1,wire2, totalWires),retMtx)
+        #print(swapNN(wire1, wire2, totalWires))
+    return retMtx
+
+def rangedcnot(control, target, totalWires):
+    if(abs(control-target) == 1): #easy case, can just run the other cnot
+        return cnot(control, target, totalWires)
+    else:#harder case, must compose swap+cnot+swap
+        #swap of n,m is its own inverse, as a double swap preserves ordering
+        #if this case, then know that control and target are not adjacent
+        swapgate = rangedSwap(control, target+1, totalWires) #swaps the control wire to right below the target wire
+        cnotgate = cnot(target+1, target, totalWires) #since control should be at target+1
         
-    
+        #now build the unitary matrix that is composed from swap-cnot-swap
+        retMtx 
+        
+
+def controlU(control, target, totalWires, unitary):
+    retur
+        
+
+
 def kron_list(arrlist):
     outarr = arrlist[0]
     for i in range(1, len(arrlist)):
@@ -277,6 +303,17 @@ def classical_shors(n, failures):
     return retval
 
 
+#take in file name and give the inverse
+def build_inverse(filename):
+    #types of elements to invert:
+    #CNot
+    #CPhase
+    #Phase
+    #Hadamard
+    return None
+   
+
+
 def mod_mult(base, exp, modulo):
     prod = 1
     for i in range(exp):
@@ -314,11 +351,12 @@ def plot_shors_guesses(domain, trialsperint, iterations):
             print("testing with random number " + str(randomnumber))
             #print(time_function(myfnc, i))
             for it in range(iterations):
-                ret = classical_shors(randomnumber)
+                ret = classical_shors(randomnumber, 0)
                 total += ret[1]
                 print("factored " + str(randomnumber) + " into " + str(ret))
         guesses.append(float(total)/iterations/trialsperint)
-    
+    writeArrayToFile('exponentspace.txt', domain)
+    writeArrayToFile('guesses.txt', guesses)
     plt.plot(domain, guesses, 'ro')
     plt.show()
 
@@ -344,11 +382,26 @@ def plot_shors_failures(domain, trialsperint, iterations):
                 failures.append(float(total)/iterations)
                 numbers.append(randomnumber)
                 times.append(end-start)
-    
+    writeArrayToFile('failures.txt', failures)
+    writeArrayToFile('times.txt', times)
+    writeArrayToFile('numbers.txt', numbers)
     plt.plot(numbers, failures, 'ro')
     plt.figure()
     plt.plot(numbers, times, 'bo')
     plt.show()
+
+def readArrayFromFile(filename):
+    retArray = []
+    with open(filename, 'r') as f:
+        lines = f.readlines()
+        for i in range(len(lines)):
+            retArray.append(float(lines[i]))
+    return retArray
+
+def writeArrayToFile(filename, array):
+    with open(filename, 'wb') as f:
+        for i in range(len(array)):
+            f.write(str(array[i]) + "\n")
 
 def is_prime(n):
     isprime = True
@@ -370,7 +423,7 @@ def gen_primes(numPrimes):
     return primelist
 
 def gen_product_primes(numPrimes):
-    primeproductlist = []    
+    primeproductlist = []
     primelist = gen_primes(numPrimes)
     for i in range(len(primelist)):
         for j in range(i, len(primelist)):
@@ -378,9 +431,9 @@ def gen_product_primes(numPrimes):
     primeproductlist.sort()
     return primeproductlist
 
-##NEAREST NEIGHBOR SWAP
-#print(swapNN(1,2,3))
-#print(rangedSwap(0, 2, 3))
+##TEST SWAP
+#print(swapNN(1,2,4))
+#print(rangedSwap(0,2, 3))
 
 #print(gen_product_primes(30))
 #print(classical_shors(71*53*11, 0))
@@ -393,18 +446,43 @@ def gen_product_primes(numPrimes):
 #plot_shors_guesses(range(3, 14), 100, 5)
 
 
+
+##PLOTTING STUFF AFTER BINNING BY BINARY EXPONENT
+'''
+numbers = readArrayFromFile("numbers.txt")
+guesses = readArrayFromFile("guesses.txt")
+failures = readArrayFromFile("failures.txt")
+karr = []
+failuresperexp = []
+sum = 0
+counter = 0
+for k in range(3, 14):
+    karr.append(k)
+    for i in range(len(numbers)):
+        if numbers[i] < 2**(k+1) and numbers[i] > 2**k:
+            sum += failures[i]
+            counter += 1
+    failuresperexp.append(float(sum)/counter)
+    sum = 0
+
+plt.plot(karr, failuresperexp, 'ro')
+plt.plot(karr, guesses, 'bo')
+plt.show()
+'''
+
 #print(is_prime(6))
 #print(is_prime(71))
 #print(ReadInput('circuit/ex1'))   
 #print(hadamard(3,0))
 #print(np.identity(8).dot(hadamard(3, 1)))
 
-
+#writeArrayToFile('saveExample.txt', [1,2,3,4,5])
+#print(readArrayFromFile('saveExample.txt'))
 #build_random("circuit/random", 4, 3)
 
 
 ##PROCESS EX1 WITH MEASURE
-process_circuit('circuit/ex1')
+#process_circuit('circuit/ex1')
 
 
 ##HISTOGRAMMING MEASUREMENT OF AN OUTPUT STATE GIVEN SOME INPUT STATE
