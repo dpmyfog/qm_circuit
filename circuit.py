@@ -23,63 +23,7 @@ secondGate=myInput[1][0]
 firstWire=myInput[0][1]
 '''
 
-'''
-def hadamard(totalWires, targetWire):
-    sq  = 1/math.sqrt(2)
-    hadamardArray = np.array([[sq, sq],[sq, -1*sq]])
-    if targetWire == 0:
-        #dot with Isize-1Xsize-1
-        hadamardArray = np.kron(hadamardArray, np.identity(2**(totalWires - 1)))
-    elif targetWire == totalWires - 1:
-        #case of last wire
-        hadamardArray = np.kron(np.identity(2**targetWire), hadamardArray)
-    else: 
-        hadamardArray = np.kron(np.identity(2**targetWire), hadamardArray)
-        hadamardArray = np.kron(hadamardArray, np.identity(2**(totalWires - targetWire - 1)))
-    return hadamardArray
-		
-
-def phase(totalWires, targetWire, phase):
-    phaseArray = np.array([[1, 0],[0, cmath.exp(1j*phase)]])
-    if targetWire == 0:
-        #case of first wire
-        phaseArray = np.kron(phaseArray, np.identity(2**(totalWires - 1)))
-    elif targetWire == totalWires - 1:
-        #case of last wire
-        phaseArray = np.kron(np.identity(2**targetWire), phaseArray)
-    else: 
-        phaseArray = np.kron(np.identity(2**targetWire), phaseArray)
-        phaseArray = np.kron(phaseArray, np.identity(2**(totalWires - targetWire - 1)))
-    return phaseArray
-
-def cnot(totalWires, controller, target):
-    if (totalWires - 1 == controller) or (totalWires - 1 == target): #special case to handle if one of them is the last one. if so, should not take last tensor product
-        if controller == target - 1: #controller above target (assuming top wire is state |0>)
-            cnotArray = np.array([[1, 0, 0, 0],[0, 1, 0, 0],[0, 0, 0, 1],[0, 0, 1, 0]])
-            return np.kron(np.identity(2**(controller)), cnotArray, 0)
-        elif controller == target + 1: #controller below target (with top wire as |0>)
-            cnotArray = np.array([[1, 0, 0 ,0],[0, 0, 0, 1],[0, 0, 1, 0],[0, 1, 0, 0]])
-            return np.kron(np.identity(2**(target)), cnotArray)
-
-    elif (controller == 0) or (target == 0):#handles case if one is first. in this case, do not tensor prodcut with first empty matrix
-        if controller == target - 1: #controller above target (assuming top wire is state |0>)
-            cnotArray = np.array([[1, 0, 0, 0],[0, 1, 0, 0],[0, 0, 0, 1],[0, 0, 1, 0]])
-            return np.kron(cnotArray, np.identity(2**(totalWires - target - 1)))
-        elif controller == target + 1: #controller below target (with top wire as |0>)
-            cnotArray = np.array([[1, 0, 0 ,0],[0, 0, 0, 1],[0, 0, 1, 0],[0, 1, 0, 0]])
-            return np.kron(cnotArray, np.identity(2**(totalWires - controller - 1)))
-
-    else:
-        if (controller == target - 1): #controller above target (assuming top wire is state |0>)
-            cnotArray = np.array([[1, 0, 0, 0],[0, 1, 0, 0],[0, 0, 0, 1],[0, 0, 1, 0]])
-            return np.kron(np.kron(np.identity(2**(controller)), cnotArray), np.identity(2**(totalWires - target - 1)))
-        elif (controller == target + 1): #controller below target (with top wire as |0>)
-            cnotArray = np.array([[1, 0, 0 ,0],[0, 0, 0, 1],[0, 0, 1, 0],[0, 1, 0, 0]])
-            return np.kron(np.kron(np.identity(2**(target)), cnotArray), np.identity(2**(totalWires - controller - 1)))
-
-'''
-
-def phase(totalWires, targetWire, phase):
+def phase(targetWire, phase, totalWires):
     phaseArray = np.array([[1, 0],[0, cmath.exp(1j*phase)]])
     identity = np.identity(2)
     arrlist = []
@@ -92,7 +36,7 @@ def phase(totalWires, targetWire, phase):
     return kron_list(arrlist)
 
 
-def hadamard(totalWires, targetWire):
+def hadamard(targetWire, totalWires):
     sq  = 1/math.sqrt(2)
     hadamardArray = np.array([[sq, sq],[sq, -1*sq]])
     arrlist = []
@@ -103,20 +47,17 @@ def hadamard(totalWires, targetWire):
             arrlist.append(np.identity(2))
     return kron_list(arrlist)
 
-def cnot(totalWires, controller, target):
+def cnot(controller, totalWires):#will always assume the control is on top
+
     arrlist = []
-    if controller == target - 1: #controller above target (assuming top wire is state |0>)
-            cnotArray = np.array([[1, 0, 0, 0],[0, 1, 0, 0],[0, 0, 0, 1],[0, 0, 1, 0]])
-            
-    elif controller == target + 1: #controller below target (with top wire as |0>)
-            cnotArray = np.array([[1, 0, 0 ,0],[0, 0, 0, 1],[0, 0, 1, 0],[0, 1, 0, 0]])
+    cnotArray = np.array([[1, 0, 0, 0],[0, 0, 0, 1],[0, 0, 1, 0],[0, 1, 0, 0]])
             
     for i in range(totalWires - 1): #minus one because two of the matrices have been condensed into one
-        if i == min(controller, target):
+        if i == controller:
             arrlist.append(cnotArray)
         else:
             arrlist.append(np.identity(2))
-    
+    arrlist.reverse()
     return kron_list(arrlist)
 
 '''
@@ -151,38 +92,78 @@ def rangedSwap(wire1, wire2, totalWires):
         list_to_swap.append((wire2 - i - 1 ,wire2-i))
     return doSwap(list_to_swap, totalWires)
 
+def cphase(control, phase, totalWires): #assume that the control wire is always target-1 (above the target wire)
+    tokron = []
+    identityMtx = np.identity(2)
+    neighborphase = np.array([[1, 0, 0, 0],[0, 1, 0, 0],[0, 0, 1, 0],[0, 0, 0, cmath.exp(1j*phase)]])
+    for i in range(0,control):
+        tokron.append(identityMtx)
+    tokron.append(neighborphase)
+    for i in range(control+2, totalWires):
+        tokron.append(identityMtx)
+    tokron.reverse()
+    retgate = kron_list(tokron)
+    return retgate
+
 def doSwap(swaplist, totalWires):
-    print(swaplist)
+    #print(swaplist)
     identityMtx = np.identity(2**totalWires)
     retMtx = identityMtx
     for i in range(len(swaplist)):
         wire1 = swaplist[i][0]
         wire2 = swaplist[i][1]
-        retMtx = np.dot(swapNN(wire1,wire2, totalWires),retMtx)
+        #print("wire 1: " + str(wire1))
+        #print("wire 2: " + str(wire2))
         #print(swapNN(wire1, wire2, totalWires))
+        #print(retMtx)
+        retMtx = np.dot(swapNN(wire1,wire2, totalWires),retMtx)
+        
     return retMtx
+
 
 def rangedcnot(control, target, totalWires):
     if(abs(control-target) == 1): #easy case, can just run the other cnot
         return cnot(control, target, totalWires)
-    else:#harder case, must compose swap+cnot+swap
-        #swap of n,m is its own inverse, as a double swap preserves ordering
-        #if this case, then know that control and target are not adjacent
-        swapgate = rangedSwap(control, target+1, totalWires) #swaps the control wire to right below the target wire
-        cnotgate = cnot(target+1, target, totalWires) #since control should be at target+1
+    prelimSwap = np.identity(2**totalWires) #used if need to flip the control and targets size
+    if control > target: #need to swap the two so that control is above
+        prelimSwap = rangedSwap(control, target, totalWires)
         
-        #now build the unitary matrix that is composed from swap-cnot-swap
-        retMtx 
-        
+    #control wire is now guaranteed to be the uppermost wire
+    highest = min(control, target) #index of controlWire
+    lowest = max(control, target) #index of targetWire
+    #want to swap control above target
+    swapgate = rangedSwap(highest, lowest-1, totalWires)
+    print(swapgate.shape)
 
-def controlU(control, target, totalWires, unitary):
-    retur
+    cnotgate = cnot(lowest-1, totalWires)
+    print(cnotgate.shape)
+    #now build the unitary matrix that is composed from swap-cnot-swap
+    innerSwap =  np.dot(swapgate,np.dot(cnotgate,swapgate))
+    return np.dot(prelimSwap, np.dot(innerSwap, prelimSwap)) 
+
+
+def rangedcphase(control, target, phase, totalWires): #takes in a 2x2 unitary and gives the matrix that describes this circuit element
+    #need to swap so that control is above
+    prelimSwap = np.identity(2**totalWires) #used if need to flip the control and targets size
+    if control > target: #need to swap the two so that control is above
+        prelimSwap = rangedSwap(control, target, totalWires)
+    highest = min(control, target)
+    lowest = max(control, target)
+    
+    swapgate = rangedSwap(highest, lowest-1, totalWires)
+    cphasegate = cphase(highest, phase, totalWires)
+    print(cphasegate.shape)
+    print(swapgate.shape)
+    innerSwap = np.dot(swapgate, np.dot(cphasegate, swapgate))
+    return np.dot(prelimSwap, np.dot(innerSwap, prelimSwap))
+    
+    
         
 
 
 def kron_list(arrlist):
     outarr = arrlist[0]
-    for i in range(1, len(arrlist)):
+    for i in range(1,len(arrlist)):
         outarr = np.kron(outarr, arrlist[i])
     return outarr
 
@@ -199,7 +180,7 @@ def process_circuit(filename):
             #print(totalWires)
             #print(myInput[1][i][1])
             #print(hadamard(float(totalWires), float(myInput[1][i][1])))
-            gatesMatrix = gatesMatrix.dot(hadamard(int(totalWires), int(myInput[1][i][1])))
+            gatesMatrix = gatesMatrix.dot(hadamard(int(myInput[1][i][1]),int(totalWires)))
         elif myInput[1][i][0] == 'CNOT':
             gatesMatrix = gatesMatrix.dot(cnot(int(totalWires), int(myInput[1][i][1]), int(myInput[1][i][2])))
         
@@ -229,8 +210,6 @@ def measure(input, gatesMatrix): #given some input state and unitary matrix repr
         idx+=1
     print coefflist
     return idx
-    
-    
     
 
 def build_random(filename, length, numWires):
@@ -270,6 +249,61 @@ def build_random(filename, length, numWires):
 		f.write(description)
         print description
 
+
+
+#take in file name and give the inverse
+def build_inverse(filename):
+    #types of elements to invert:
+    #CNot
+    #CPhase
+    #Phase
+    #Hadamard
+    newFileName = filename + "_inverse"
+    input = ReadInput(filename)
+    numWires = input[0]
+    inputGates = input[1]
+    numGates = len(inputGates)
+    inverseDescription = []
+    willMeasure = False
+   
+    #print(inputGates)
+    for i in range(numGates):
+        if inputGates[i][0] == 'H':
+            inverseDescription.append(['H', str(inputGates[i][1])]) #just put it back in
+        elif inputGates[i][0] == 'CNOT':
+            inverseDescription.append(['CNOT', str(inputGates[i][1]), str(inputGates[i][2])])
+        elif inputGates[i][0] == 'P':
+            #print('read phase')
+            inverseDescription.append(['P', str(inputGates[i][1]), str(-1*float(inputGates[i][2]))])
+         
+        elif inputGates[i][0] == 'Measure':
+            willMeasure = True
+    inverseDescription.append(numWires)
+    inverseDescription.reverse()
+    if willMeasure:
+        inverseDescription.append(['Measure'])
+    writeArrayToFile(newFileName, inverseDescription)
+
+
+def buildsimpleQFT():
+    description = "3\n" 
+    description += "H 0\n"
+    description += "CPHASE 1 0 " + str(math.pi/2) + "\n"
+    description += "H 1\n"
+    description += "CPHASE 2 0 " + str(math.pi/4) + "\n"
+    description += "CPHASE 2 1 " + str(math.pi/2) + "\n"
+    description += "H 2\n"
+    description += "Measure"
+
+    #description now has the full description of the QFT on 3 wires.
+    with open("circuit/three_wire_QFT", 'w') as f:
+	f.write(description)
+    print description
+    
+
+     
+##SHOR'S ALGORITHM AND UTILITY FUNCTIONS
+    
 def classical_shors(n, failures):
     a = random.randint(1, int(math.sqrt(n)))
     #print(x)
@@ -302,15 +336,8 @@ def classical_shors(n, failures):
     #print("factored " + str(n) + " into " + str(retval))
     return retval
 
+    
 
-#take in file name and give the inverse
-def build_inverse(filename):
-    #types of elements to invert:
-    #CNot
-    #CPhase
-    #Phase
-    #Hadamard
-    return None
    
 
 
@@ -390,18 +417,7 @@ def plot_shors_failures(domain, trialsperint, iterations):
     plt.plot(numbers, times, 'bo')
     plt.show()
 
-def readArrayFromFile(filename):
-    retArray = []
-    with open(filename, 'r') as f:
-        lines = f.readlines()
-        for i in range(len(lines)):
-            retArray.append(float(lines[i]))
-    return retArray
 
-def writeArrayToFile(filename, array):
-    with open(filename, 'wb') as f:
-        for i in range(len(array)):
-            f.write(str(array[i]) + "\n")
 
 def is_prime(n):
     isprime = True
@@ -431,10 +447,32 @@ def gen_product_primes(numPrimes):
     primeproductlist.sort()
     return primeproductlist
 
+
+def readArrayFromFile(filename):
+    retArray = []
+    with open(filename, 'r') as f:
+        lines = f.readlines()
+        for i in range(len(lines)):
+            retArray.append(float(lines[i]))
+    return retArray
+
+def writeArrayToFile(filename, array):
+    with open(filename, 'wb') as f:
+        for i in range(len(array)):
+            f.write(str(array[i]) + "\n")
+
 ##TEST SWAP
 #print(swapNN(1,2,4))
-#print(rangedSwap(0,2, 3))
+#print(rangedSwap(0,3, 4))
+#print(rangedcnot(0, 2,3))
+#print(cnot(1,3))
+#print(rangedcphase(0, 1, 1, 2))
 
+##Testing circuit building
+#print(build_inverse("circuit/ex1"))
+#print(readArrayFromFile("circuit/ex1"))
+buildsimpleQFT()
+process_circuit("circuit/three_wire_QFT")
 #print(gen_product_primes(30))
 #print(classical_shors(71*53*11, 0))
 #print(mod_mult(71, 10, 15))
@@ -468,7 +506,6 @@ for k in range(3, 14):
 plt.plot(karr, failuresperexp, 'ro')
 plt.plot(karr, guesses, 'bo')
 plt.show()
-'''
 
 #print(is_prime(6))
 #print(is_prime(71))
@@ -479,7 +516,7 @@ plt.show()
 #writeArrayToFile('saveExample.txt', [1,2,3,4,5])
 #print(readArrayFromFile('saveExample.txt'))
 #build_random("circuit/random", 4, 3)
-
+'''
 
 ##PROCESS EX1 WITH MEASURE
 #process_circuit('circuit/ex1')
