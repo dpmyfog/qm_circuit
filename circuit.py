@@ -5,6 +5,11 @@ from fractions import gcd
 import random
 import time
 import matplotlib.pyplot as plt
+from fractions import Fraction
+import itertools
+try: zip = itertools.izip
+except: pass
+
 np.set_printoptions(linewidth = 300)
 np.set_printoptions(threshold = np.nan)
 def ReadInput(fileName):
@@ -122,8 +127,8 @@ def doSwap(swaplist, totalWires):
 
 
 def rangedcnot(control, target, totalWires):
-    if(abs(control-target) == 1): #easy case, can just run the other cnot
-        return cnot(control, target, totalWires)
+    if(target - control == 1): #easy case, can just run the other cnot
+        return cnot(control, totalWires)
     prelimSwap = np.identity(2**totalWires) #used if need to flip the control and targets size
     if control > target: #need to swap the two so that control is above
         prelimSwap = rangedSwap(control, target, totalWires)
@@ -134,7 +139,7 @@ def rangedcnot(control, target, totalWires):
     #want to swap control above target
     swapgate = rangedSwap(highest, lowest-1, totalWires)
     print(swapgate.shape)
-
+    
     cnotgate = cnot(lowest-1, totalWires)
     print(cnotgate.shape)
     #now build the unitary matrix that is composed from swap-cnot-swap
@@ -153,13 +158,26 @@ def rangedcphase(control, target, phase, totalWires): #takes in a 2x2 unitary an
     swapgate = rangedSwap(highest, lowest-1, totalWires)
     cphasegate = cphase(highest, phase, totalWires)
     print(cphasegate.shape)
+
     print(swapgate.shape)
     innerSwap = np.dot(swapgate, np.dot(cphasegate, swapgate))
     return np.dot(prelimSwap, np.dot(innerSwap, prelimSwap))
     
-    
-        
 
+#j string of j2 j1 j0 and k string of k2 k1 k0
+def U(j,k, numBits): 
+    phase = 0.0
+    for jBit in range(0,numBits):
+        for kBit in range(0,numBits):
+            phase = phase + addPhase(j[jBit], jBit, k[kBit], kBit)
+            print(phase)
+    return 1/math.sqrt(2.0**numBits)*cmath.exp(2.0*1.j*np.pi*phase/(2.0**numBits))
+        
+def addPhase(jbitval, jbit, kbitval, kbit):
+    exponent = 4-int(jbit)-int(kbit)
+    retval = int(jbitval)*int(kbitval)*(2**exponent)
+    print("phase from " + str((jbit, kbit)) + ": " + str(retval))
+    return retval
 
 def kron_list(arrlist):
     outarr = arrlist[0]
@@ -182,17 +200,18 @@ def process_circuit(filename):
             #print(hadamard(float(totalWires), float(myInput[1][i][1])))
             gatesMatrix = gatesMatrix.dot(hadamard(int(myInput[1][i][1]),int(totalWires)))
         elif myInput[1][i][0] == 'CNOT':
-            gatesMatrix = gatesMatrix.dot(cnot(int(totalWires), int(myInput[1][i][1]), int(myInput[1][i][2])))
+            gatesMatrix = gatesMatrix.dot(rangedcnot(int(myInput[1][i][1]), int(myInput[1][i][2]),int(totalWires)))
         
         elif myInput[1][i][0] == 'P':
             #print('read phase')
-            gatesMatrix = gatesMatrix.dot(phase(int(totalWires), int(myInput[1][i][1]), float(myInput[1][i][2])))     
+            gatesMatrix = gatesMatrix.dot(phase(int(myInput[1][i][1]), float(myInput[1][i][2]), int(totalWires)))     
         
         elif myInput[1][i][0] == 'Measure':
             
             willMeasure= True
     if willMeasure:
-        inputstate = np.array([[1.0],[0],[0],[0],[0],[0],[0],[0]])
+        inputstate = np.array([[0],[0.0],[1.0],[0],[0],[0],[0],[0]])
+        print(np.dot(gatesMatrix, inputstate))
         print("Measured the state corresponding to the decimal number: " + str(measure(inputstate, gatesMatrix)))
     return gatesMatrix
 
@@ -301,9 +320,43 @@ def buildsimpleQFT():
     print description
     
 
-     
-##SHOR'S ALGORITHM AND UTILITY FUNCTIONS
+def buildQFT(numWires): #recursive formula for building qft
+    if numWires == 1:
+        return "H 0"
+    else:
+        description = ""
+        description = description + buildQFT(numWires-1) + "\n"
+        for i in range(0, numWires - 1):
+            description = description + "CPHASE " + str(numWires - 1) + " " + str(i) +  " " + str(math.pi/(2**(numWires-1 - i))) + "\n"
+        description += "H " + str(numWires - 1)
+
+        return description
     
+def buildPFM(x,N): #period finding matrix
+    numBits = int(round(math.ceil(math.log(N, 2))))
+    scale = 1.0/(2**numBits)
+    size = (2**numBits, 2**numBits)
+    pfm = np.zeros(size)
+    for row in range(size[0]):
+        if row < N:
+            targetCol = (row*x % N)
+            pfm[row,targetCol] = 1
+        else:
+            pfm[row, row] = 1
+
+    return pfm
+        
+            
+                
+##SHOR'S ALGORITHM AND UTILITY FUNCTIONS
+########################################
+def mod_mult(a,r,n): #calculates a**r mod n
+    prod = 1
+    for i in range(r):
+        prod = prod*a % n
+    return prod
+
+
 def classical_shors(n, failures):
     a = random.randint(1, int(math.sqrt(n)))
     #print(x)
@@ -336,17 +389,103 @@ def classical_shors(n, failures):
     #print("factored " + str(n) + " into " + str(retval))
     return retval
 
+def classical_shors_modified(n, failures): #same as classical shor's, but using the matrix/eigenvalue analysis instead
+    a = random.randint(1, int(math.sqrt(n)+2))
+    pfm = buildPFM(a, n)
+    print(pfm)
+    evals, evecs = np.linalg.eig(pfm)
+    
+    '''
+    #print(x)
+    r = 0
+    retval = (-1, -1)
+    if gcd(a, n) != 1: # we found a nontrivial factor
+        #print("successful guess: a is " + str(a) + " and the gcd of a and n is " + str(gcd(a,n)))
+        retval = [(gcd(a, n), n/gcd(a , n)), 0, failures]
+    else: #need to complete rest of shor's
+        r = 1
+        while mod_mult(a,r,n) != 1:
+            r += 1
+        if r%2 == 1: #if r is odd try again
+            #print("failed due to odd exponent")
+            retval =  classical_shors(n, failures + 1)
+            
+        else: 
+            prod = mod_mult(a, (r/2), n)
+            first = gcd(prod - 1, n)
+            second = gcd(prod + 1, n)
+            #print("got into the prod block")
+            if(first == 1 or second == 1):
+                #print("failed due to trivial factor")
+                retval =  classical_shors(n, failures + 1)
+                
+            else:
+                retval = [(first, second), r, failures]
+                print((evals*r))
+                #print("total failures: " + str(failures))
+                
+    #print("factored " + str(n) + " into " + str(retval))
+    return retval   
+    '''
+    #now pick a random eigenvalue
+    randIdx = random.randint(0, len(evals)-1)
+    i = 0
+    #print(evals)
+    failed = True
+    while (evals[randIdx] == 1 or evals[randIdx] == 0) and (i < 1000):
+        #print("guessed: " + str(evals[randIdx]))
+        randIdx = random.randint(0, len(evals)-1)
+        i+=1
+        print(str(i))
+    if i != 1000:
+        failed = False
+    
+        
+    
+            
+    if not failed:
+        print("picked eigenvalue: " + str(evals[randIdx]))
+        print(str(cmath.log(evals[randIdx])/2/math.pi/1j))
+        print(continuedFractions(cmath.log(evals[randIdx])/2/math.pi/1j, "", 0))
+    else:
+        print("failed")
+        classical_shors_modified(n, 0)
     
 
-   
+######################################################
+###CONTINUED FRACTIONS ALGORITHM 
 
+def continuedFractions(d, form, period): #d is some decimal; form is the string gving the form
+    #print("d: " + str(d))
 
-def mod_mult(base, exp, modulo):
-    prod = 1
-    for i in range(exp):
-        prod = (prod * base)%modulo
-    return prod
+    #print(d)
+    if math.fabs(d.imag) < 1E-10:
+        d = float(d.real)
+        #print(d)
+    integerPart = math.floor(d)
+    realPart = d
+    if math.fabs(integerPart - realPart) < 1E-10:
+        #we're done
+        form = form + " " + str(integerPart)
+        period+=1
+        return form,period
+    else:
+        #print("made it to else (line 457)")
+        #print("realPt" + str(realPart))
+        #print("intPt" + str(integerPart))
+        fractionalPart = realPart - integerPart
+        #print("fraxnal" + str(fractionalPart))
+        reciprocal = 1/fractionalPart
+        #print("recip" + str(reciprocal))
+        form = form + " " + str(integerPart)
+        period+=1
+        return continuedFractions(reciprocal, form, period)
+    
+          
+          
 
+##END FRACTIONS ALGORITHM
+###################################################
 def time_function(myfnc, iterations,  param = None):
     timespent = 0
     for i in range(iterations):
@@ -406,7 +545,7 @@ def plot_shors_failures(domain, trialsperint, iterations):
                 end = time.time()
                 total += ret[2]
                 print("factored " + str(randomnumber) + " into " + str(ret))
-                failures.append(float(total)/iterations)
+                failures.append(float(total))
                 numbers.append(randomnumber)
                 times.append(end-start)
     writeArrayToFile('failures.txt', failures)
@@ -468,14 +607,41 @@ def writeArrayToFile(filename, array):
 #print(cnot(1,3))
 #print(rangedcphase(0, 1, 1, 2))
 
-##Testing circuit building
+##TEST circuit building
 #print(build_inverse("circuit/ex1"))
 #print(readArrayFromFile("circuit/ex1"))
-buildsimpleQFT()
-process_circuit("circuit/three_wire_QFT")
+#buildsimpleQFT()
+#process_circuit("circuit/three_wire_QFT")
 #print(gen_product_primes(30))
-#print(classical_shors(71*53*11, 0))
+#print(classical_shors_modified(21, 0))
 #print(mod_mult(71, 10, 15))
+#print(U("100", "010"))
+
+#eigvals, eigvecs = np.linalg.eig(buildPFM(3, 5))
+#print(eigvals)
+
+##test eigenvalues of pfm
+
+
+#print(continuedFractions(3.245, ""))
+#THIS TESTS ADD PHASE AND U(j,k)
+'''
+testMtx = np.zeros((8,8), dtype=np.complex)
+for i in range(0,8):
+    for j in range(0,8):
+        istr = bin(i)[2:]
+        jstr = bin(j)[2:]
+        while(len(istr) < 3):
+            istr = "0" + istr
+        while(len(jstr) < 3):
+            jstr = "0" + jstr
+        print i
+        print j
+        print istr
+        print jstr
+        testMtx[i,j] = U(istr, jstr, 3)
+print(testMtx)
+'''
 
 ##PLOTTING SHORS FAILURES vs log(n) (AND TIME COMPLEXITY)
 #plot_shors_failures(range(3,14), 100, 5)
@@ -504,9 +670,9 @@ for k in range(3, 14):
     sum = 0
 
 plt.plot(karr, failuresperexp, 'ro')
-plt.plot(karr, guesses, 'bo')
+#plt.plot(karr, guesses, 'bo')
 plt.show()
-
+'''
 #print(is_prime(6))
 #print(is_prime(71))
 #print(ReadInput('circuit/ex1'))   
@@ -516,14 +682,21 @@ plt.show()
 #writeArrayToFile('saveExample.txt', [1,2,3,4,5])
 #print(readArrayFromFile('saveExample.txt'))
 #build_random("circuit/random", 4, 3)
-'''
+
 
 ##PROCESS EX1 WITH MEASURE
-#process_circuit('circuit/ex1')
 
 
-##HISTOGRAMMING MEASUREMENT OF AN OUTPUT STATE GIVEN SOME INPUT STATE
-'''
+
+
+##CHECKPOINTS FROM PAGE 1
+
+#eat a description, output circuit
+print("Eating a circuit and outputting/measuring final state")
+process_circuit('circuit/ex1')
+
+
+print("Histogramming output")
 inputState = np.array([[1.0],[0],[0],[0],[0],[0],[0],[0]])
 mydict = {}
 for i in range(len(inputState)):
@@ -531,4 +704,39 @@ for i in range(len(inputState)):
 for i in range(1000):
     mydict[measure(inputState, process_circuit('circuit/ex1'))] += 1
 print mydict
-'''
+
+##Build Control-U (implemented for CPhase, know the theory)
+
+
+##CHECKPOINTS FROM PAGE 2
+
+#"circuit/three_wire_QFT"
+# 3 Wire QFT: do on paper (a lot of the omega^n simplify to 1 since they're integer multiples of 2pi)
+
+# (48%) j*k = 0 for the first row (as well as first column) thus omega**jk = 1
+# (50%) These phases are the contributions from each combo of bits from j and k. This is visible when you write out explicitly the terms of j*k after expanding them in their binary representation
+# (52%) These
+# (54%) On
+# (56%) Separate
+# (58%) Sheet
+# (60%) of
+# (62%) Paper
+# (64%):
+print("BUILD QFT_N~~~~~~~~~~~~~~~~~")
+print(buildQFT(5))
+
+##CHECKPOINTS FROM PAGE 3: SHOR'S ALGORITHM
+print("CLASSICAL SHOR'S ALGORITHM~~~~~~~~~~~~~~")
+print(classical_shors(21*47, 0))
+#For graphs, see desktop pictures
+
+##CHECKPOINTS FROM PAGE 4: PERIOD FINDING WITH QUANTUM MECHANICS
+#(78%) Build period finding unitary matrix
+pfm = buildPFM(3,7)
+#(82%) Get the eigenvalues and show that they give phases that are integers
+print(pfm)
+evals, evecs =np.linalg.eig(pfm)
+print(evals)
+
+#Period Finding
+print(classical_shors_modified(21, 0))
